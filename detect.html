@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Detective</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@300;400&display=swap');
+
+        :root {
+            --primary-color: #00ffcc;
+            --background-color: #0a0a1a;
+            --dark-grey: #1a1a2a;
+            --light-grey: #cccccc;
+            --error-color: #ff4d4d;
+            --success-color: #4dff88;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--background-color);
+            color: var(--light-grey);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--dark-grey);
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 20px var(--primary-color);
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        header h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--primary-color);
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .box {
+            background-color: rgba(10, 10, 26, 0.8);
+            border: 1px solid #005a4d;
+            border-radius: 5px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        #data-text {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1.1rem;
+            color: var(--primary-color);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        #question-text {
+            margin-top: 0;
+            color: white;
+        }
+
+        input[type="text"] {
+            width: calc(100% - 24px);
+            padding: 12px;
+            background-color: var(--background-color);
+            border: 1px solid var(--primary-color);
+            border-radius: 5px;
+            color: var(--light-grey);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        button {
+            font-family: 'Orbitron', sans-serif;
+            background-color: transparent;
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: var(--primary-color);
+            color: var(--background-color);
+            box-shadow: 0 0 15px var(--primary-color);
+        }
+
+        #feedback-area {
+            min-height: 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-top: 1rem;
+        }
+
+        .feedback-success {
+            color: var(--success-color);
+        }
+
+        .feedback-error {
+            color: var(--error-color);
+        }
+
+        footer {
+            border-top: 1px solid #005a4d;
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <header>
+            <h1>Data Detective</h1>
+            <p>Uncover the truth hidden in the numbers.</p>
+        </header>
+
+        <main id="game-main">
+            <div id="narrative-area" class="box">
+                <p id="narrative-text">Loading case file...</p>
+            </div>
+
+            <div id="data-display-area" class="box">
+                <h2>Case Data</h2>
+                <pre id="data-text"></pre>
+                <canvas id="data-chart"></canvas>
+            </div>
+
+            <div id="puzzle-area" class="box">
+                <h2 id="question-text">The Question</h2>
+                <input type="text" id="answer-input" placeholder="Enter your analysis here...">
+                <button id="submit-button">Submit Report</button>
+            </div>
+
+            <div id="feedback-area">
+                <p id="feedback-text"></p>
+            </div>
+        </main>
+
+        <footer>
+            <button id="save-button">Save Progress</button>
+            <button id="load-button">Load Progress</button>
+            <button id="reset-button">Start New Game</button>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM ELEMENT REFERENCES ---
+            const narrativeText = document.getElementById('narrative-text');
+            const dataText = document.getElementById('data-text');
+            const questionText = document.getElementById('question-text');
+            const answerInput = document.getElementById('answer-input');
+            const submitButton = document.getElementById('submit-button');
+            const feedbackText = document.getElementById('feedback-text');
+            const saveButton = document.getElementById('save-button');
+            const loadButton = document.getElementById('load-button');
+            const resetButton = document.getElementById('reset-button');
+            const chartCanvas = document.getElementById('data-chart');
+            let dataChart = null; // To hold the chart instance
+
+            // --- GAME STATE ---
+            let currentCaseIndex = 0;
+            let currentData = null;
+
+            // --- CASE FILES (PUZZLES) ---
+            const caseFiles = [
+                {
+                    narrative: "Case 01: The anomalous energy spikes. We've detected unusual energy readings from sub-sector Gamma. The readings fluctuate wildly. Calculate the average (mean) energy level to determine if it exceeds the safety threshold of 50.",
+                    question: "What is the mean energy level?",
+                    dataType: 'mean',
+                    generateData: () => {
+                        const data = Array.from({ length: 10 }, () => Math.floor(Math.random() * 80) + 10);
+                        currentData = data;
+                        return data.join(', ');
+                    },
+                    checkAnswer: (userAnswer) => {
+                        const mean = currentData.reduce((a, b) => a + b, 0) / currentData.length;
+                        return Math.abs(parseFloat(userAnswer) - mean) < 0.1; // Allow for floating point differences
+                    }
+                },
+                {
+                    narrative: "Case 02: Fluctuating stock prices. A rival corporation is suspected of market manipulation. We've collected the closing prices of their stock for the last 11 days. Find the median price to see what the 'typical' value is, ignoring extreme outliers.",
+                    question: "What is the median stock price?",
+                    dataType: 'median',
+                    generateData: () => {
+                        const data = Array.from({ length: 11 }, () => (Math.random() * 100 + 150).toFixed(2));
+                        currentData = data.map(parseFloat).sort((a, b) => a - b);
+                        return currentData.join(', ');
+                    },
+                    checkAnswer: (userAnswer) => {
+                        const median = currentData[Math.floor(currentData.length / 2)];
+                        return parseFloat(userAnswer) === median;
+                    }
+                },
+                {
+                    narrative: "Case 03: Engine stress analysis. We're testing a new hyperdrive engine. We have data points linking engine temperature to vibration frequency. We need to know if there's a relationship. Analyze the scatter plot.",
+                    question: "Is the correlation 'positive', 'negative', or 'none'?",
+                    dataType: 'scatter',
+                    generateData: () => {
+                        const data = [];
+                        for (let i = 0; i < 20; i++) {
+                            const temp = 50 + i * 5 + (Math.random() - 0.5) * 10;
+                            const vibration = 100 + temp * 2 + (Math.random() - 0.5) * 50;
+                            data.push({ x: temp.toFixed(2), y: vibration.toFixed(2) });
+                        }
+                        currentData = data;
+                        return "See data visualization chart.";
+                    },
+                    checkAnswer: (userAnswer) => {
+                        // For this generated data, the correlation is strongly positive.
+                        return userAnswer.toLowerCase().trim() === 'positive';
+                    }
+                },
+                {
+                    narrative: "Congratulations, Detective! All current case files have been solved. Your analytical skills are unmatched. Stand by for your next assignment.",
+                    question: "Game Complete!",
+                    dataType: 'end',
+                    generateData: () => "System Offline.",
+                    checkAnswer: () => false
+                }
+            ];
+
+            // --- GAME LOGIC FUNCTIONS ---
+            function loadCase(caseIndex) {
+                const caseData = caseFiles[caseIndex];
+                
+                narrativeText.textContent = caseData.narrative;
+                questionText.textContent = caseData.question;
+                answerInput.value = '';
+                feedbackText.textContent = '';
+                
+                // Handle data display
+                const generatedData = caseData.generateData();
+                dataText.textContent = generatedData;
+
+                // Handle chart visualization
+                if (dataChart) {
+                    dataChart.destroy(); // Clear previous chart
+                }
+                
+                if (caseData.dataType === 'scatter') {
+                    chartCanvas.style.display = 'block';
+                    dataText.style.display = 'none';
+                    renderScatterPlot(currentData);
+                } else {
+                    chartCanvas.style.display = 'none';
+                    dataText.style.display = 'block';
+                }
+
+                // Disable input for the end of the game
+                if (caseData.dataType === 'end') {
+                    answerInput.disabled = true;
+                    submitButton.disabled = true;
+                } else {
+                    answerInput.disabled = false;
+                    submitButton.disabled = false;
+                }
+            }
+
+            function renderScatterPlot(data) {
+                const ctx = chartCanvas.getContext('2d');
+                dataChart = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'Engine Temperature vs. Vibration',
+                            data: data,
+                            backgroundColor: 'rgba(0, 255, 204, 0.6)',
+                            borderColor: 'rgba(0, 255, 204, 1)',
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: { display: true, text: 'Temperature (°C)' }
+                            },
+                            y: {
+                                title: { display: true, text: 'Vibration (Hz)' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function handleSubmit() {
+                const userAnswer = answerInput.value;
+                if (!userAnswer) {
+                    feedbackText.textContent = "Analysis required. Please enter an answer.";
+                    feedbackText.className = 'feedback-error';
+                    return;
+                }
+
+                const isCorrect = caseFiles[currentCaseIndex].checkAnswer(userAnswer);
+
+                if (isCorrect) {
+                    feedbackText.textContent = "Correct! Accessing next case file...";
+                    feedbackText.className = 'feedback-success';
+                    currentCaseIndex++;
+                    if (currentCaseIndex < caseFiles.length) {
+                        setTimeout(() => loadCase(currentCaseIndex), 1500);
+                    }
+                } else {
+                    feedbackText.textContent = "Incorrect analysis. Re-evaluate the data.";
+                    feedbackText.className = 'feedback-error';
+                }
+            }
+            
+            // --- PERSISTENCE FUNCTIONS ---
+            function saveGame() {
+                localStorage.setItem('dataDetectiveProgress', currentCaseIndex);
+                feedbackText.textContent = `Progress saved at Case ${currentCaseIndex + 1}.`;
+                feedbackText.className = 'feedback-success';
+            }
+
+            function loadGame() {
+                const savedIndex = localStorage.getItem('dataDetectiveProgress');
+                if (savedIndex !== null) {
+                    currentCaseIndex = parseInt(savedIndex, 10);
+                    loadCase(currentCaseIndex);
+                    feedbackText.textContent = `Progress loaded. Resuming at Case ${currentCaseIndex + 1}.`;
+                    feedbackText.className = 'feedback-success';
+                } else {
+                    feedbackText.textContent = "No saved data found.";
+                    feedbackText.className = 'feedback-error';
+                }
+            }
+
+            function resetGame() {
+                localStorage.removeItem('dataDetectiveProgress');
+                currentCaseIndex = 0;
+                loadCase(currentCaseIndex);
+                feedbackText.textContent = "New game started. Previous progress has been erased.";
+                feedbackText.className = '';
+            }
+
+            // --- EVENT LISTENERS ---
+            submitButton.addEventListener('click', handleSubmit);
+            answerInput.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') {
+                    handleSubmit();
+                }
+            });
+            saveButton.addEventListener('click', saveGame);
+            loadButton.addEventListener('click', loadGame);
+            resetButton.addEventListener('click', resetGame);
+
+            // --- INITIALIZE GAME ---
+            loadCase(currentCaseIndex);
+        });
+    </script>
+</body>
+</html>
